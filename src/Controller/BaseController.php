@@ -1,6 +1,6 @@
 <?php
 
-namespace WebmanMicro\BaseClass;
+namespace WebmanMicro\Base;
 
 
 class BaseController

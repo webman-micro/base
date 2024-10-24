@@ -1,8 +1,8 @@
 <?php
 
-namespace WebmanMicro\Base;
+namespace WebmanMicro\Base\Validate;
 
-use support\ErrorCode;
+use WebmanMicro\Base\support\ErrorCode;
 use taoser\Validate;
 
 class BaseValidate extends Validate
