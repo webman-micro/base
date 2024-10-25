@@ -72,59 +72,58 @@ class BaseService
     protected function generateDbFilter(&$db, $filter): void
     {
         $queryFilter = [];
-        foreach ($filter as $field => $conditionData) {
-            if ($field === '_logic') {
-                continue;
-            }
+        foreach ($filter['param'] as $field => $conditionData) {
             [$op, $condition] = $conditionData;
+            $expr = '';
             switch ($op) {
                 case '-eq':
-                    $queryFilter[] = [$field, '=', $condition];
+                    $expr = ' = ' . $condition;
                     break;
                 case '-neq':
-                    $queryFilter[] = [$field, '<>', $condition];
+                    $expr = ' <> ' . $condition;
                     break;
                 case '-gt':
-                    $queryFilter[] = [$field, '>', $condition];
+                    $expr = ' > ' . $condition;
                     break;
                 case '-egt':
-                    $queryFilter[] = [$field, '>=', $condition];
+                    $expr = ' >= ' . $condition;
                     break;
                 case '-lt':
-                    $queryFilter[] = [$field, '<', $condition];
+                    $expr = ' < ' . $condition;
                     break;
                 case '-elt':
-                    $queryFilter[] = [$field, '<=', $condition];
+                    $expr = ' <= ' . $condition;
                     break;
                 case '-lk':
-                    $queryFilter[] = [$field, 'LIKE', "%{$condition}%"];
+                    $expr = ' LIKE "%' . $condition . '%"';
                     break;
                 case '-not-lk':
-                    $queryFilter[] = [$field, 'NOT LIKE', "%{$condition}%"];
+                    $expr = ' NOT LIKE "%' . $condition . '%"';
                     break;
                 case '-bw':
-                    $queryFilter[] = [$field, 'BETWEEN', $condition];
+                    $expr = ' BETWEEN ' . $condition[0] . ' AND ' . $condition[1];
                     break;
                 case '-not-bw':
-                    $queryFilter[] = [$field, 'NOT BETWEEN', $condition];
+                    $expr = ' NOT BETWEEN ' . $condition[0] . ' AND ' . $condition[1];
                     break;
                 case '-in':
-                    $queryFilter[] = [$field, 'IN', $condition];
+                    $expr = ' IN ' . join(',', $condition);
                     break;
                 case '-not-in':
-                    $queryFilter[] = [$field, 'NOT IN', $condition];
+                    $expr = ' NOT IN ' . join(',', $condition);
                     break;
                 case '-find_in_set':
-                    $queryFilter[] = ['', 'exp', Db::raw("FIND_IN_SET({$condition},{$field})")];
+                    $expr = Db::raw("FIND_IN_SET({$condition},{$field})");
                     break;
             }
+
+            $queryFilter[$field] = $expr;
         }
 
-        if (array_key_exists('_logic', $filter) && $filter['_logic'] === '-or') {
-            $db = $db->whereOr($queryFilter);
-        } else {
-            $db = $db->where($queryFilter);
-        }
+        $engine = new \StringTemplate\Engine;
+        $sqlStr = $engine->render($filter['rule'], $queryFilter);
+
+        $db = $db->whereRaw($sqlStr);
     }
 
     /**

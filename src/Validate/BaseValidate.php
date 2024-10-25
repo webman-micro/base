@@ -41,68 +41,104 @@ class BaseValidate extends Validate
      */
     protected function queryFilter($filter, $rule, $data): bool
     {
-        if (is_array($filter)) {
-            foreach ($filter as $field => $conditionData) {
+        // $filter 为空则跳过
+        if (empty($filter)) {
+            return true;
+        }
 
-                if ($field === '_logic') {
-                    if (is_string($conditionData) && in_array($conditionData, ['-or', '-and'])) {
-                        continue;
-                    } else {
-                        throw_http_exception("The filtering condition query logic can only be -or or -and.", ErrorCode::ILLEGAL_QUERY);
+        // $filter 不为空，必须指定哪些字段可以被过滤
+        if (empty($rule)) {
+            throw_http_exception("Filter fields must be specified.", ErrorCode::ILLEGAL_QUERY);
+        }
+
+        // $filter 必须使用 {"param": {}, "rule": ""} 参数结构
+        if (!empty($filter['param']) && !empty($filter['rule'])) {
+
+            // rule 只能包含，param里面字段名允许的字段和 () {} 空格
+            // 允许过滤字段
+            $allowFields = explode(',', $rule);
+
+            // 允许存在的字符串
+            if (is_string($filter['rule'])) {
+                // 组装过滤条件
+                $allowedChars = join('', $allowFields) . 'andor#123456789{}()';
+                $pattern = '/^[' . preg_quote($allowedChars, '/') . '\s]+$/';
+
+                // 正则规则验证
+                if (preg_match($pattern, $filter['rule']) !== 1) {
+                    throw_http_exception("Illegal characters exist in filter rule.", ErrorCode::ILLEGAL_QUERY);
+                }
+            } else {
+                throw_http_exception("The format of the rule parameter must be string.", ErrorCode::ILLEGAL_QUERY);
+            }
+
+            // param 格式必须为 id : ["-eq", 2]
+            //                字段: [过滤方法, 过滤参数]
+            if (is_array($filter['param'])) {
+                foreach ($filter['param'] as $field => $conditionData) {
+
+                    $chekField = explode('#', $field)[0];
+                    if (!in_array($chekField, $allowFields)) {
+                        // 当前字段不允许过滤
+                        throw_http_exception("The {$field} fields are not allowed to be filtered.", ErrorCode::ILLEGAL_QUERY);
+                    }
+
+                    if (!is_array($conditionData) || count($conditionData) != 2) {
+                        // 参数必须是两位长度
+                        throw_http_exception("The format of {$field} field query criteria is incorrect.", ErrorCode::ILLEGAL_QUERY);
+                    }
+
+                    // 验证字段条件
+                    [$op, $condition] = $conditionData;
+
+                    // 验证字段数值
+                    switch ($op) {
+                        case '-gt':
+                        case '-egt':
+                        case '-lt':
+                        case '-elt':
+                            // 查询参数必须为数字
+                            if (!is_numeric($condition)) {
+                                throw_http_exception("The {$field} field query value must be a number.", ErrorCode::ILLEGAL_QUERY);
+                            }
+                            break;
+                        case '-lk':
+                        case '-not-lk':
+                        case '-eq':
+                        case '-neq':
+                        case '-find_in_set':
+                            // 查询参数必须为数字或者字符串
+                            if (!(is_numeric($condition) || is_string($condition))) {
+                                throw_http_exception("The {$field} field query value must be a number or string.", ErrorCode::ILLEGAL_QUERY);
+                            }
+                            break;
+                        case '-bw':
+                        case '-not-bw':
+                            // 查询参数必须为数组且长度等于2
+                            if (!(is_array($condition) && count($condition) == 2)) {
+                                throw_http_exception("The {$field} field query parameter must be an array with a length equal to 2.", ErrorCode::ILLEGAL_QUERY);
+                            }
+                            break;
+                        case '-in':
+                        case '-not-in':
+                            // 查询参数必须为字符串且用逗号隔开
+                            if (!(is_string($condition) && strpos($condition, ',') >= 0)) {
+                                throw_http_exception("The {$field} field query parameters must be strings separated by commas.", ErrorCode::ILLEGAL_QUERY);
+                            }
+                            break;
+                        default:
+                            // 查询条件仅支持 -gt,-egt,-lt,-elt,-lk,-not-lk,-eq,-neq,-bw,-not-bw,-in,-not-in,-find_in_set
+                            throw_http_exception("The query condition only support: -gt,-egt,-lt,-elt,-lk,-not-lk,-eq,-neq,-bw,-not-bw,-in,-not-in,-find_in_set.", ErrorCode::ILLEGAL_QUERY);
+                            break;
                     }
                 }
 
-                if (count($conditionData) != 2) {
-                    // 参数必须是两位长度
-                    throw_http_exception("The format of {$field} field query criteria is incorrect.", ErrorCode::ILLEGAL_QUERY);
-                }
-
-                // 验证字段条件
-                [$op, $condition] = $conditionData;
-
-                // 验证字段数值
-                switch ($op) {
-                    case '-gt':
-                    case '-egt':
-                    case '-lt':
-                    case '-elt':
-                        // 查询参数必须为数字
-                        if (!is_numeric($condition)) {
-                            throw_http_exception("The {$field} field query value must be a number.", ErrorCode::ILLEGAL_QUERY);
-                        }
-                        break;
-                    case '-lk':
-                    case '-not-lk':
-                    case '-eq':
-                    case '-neq':
-                    case '-find_in_set':
-                        // 查询参数必须为数字或者字符串
-                        if (!(is_numeric($condition) || is_string($condition))) {
-                            throw_http_exception("The {$field} field query value must be a number or string.", ErrorCode::ILLEGAL_QUERY);
-                        }
-                        break;
-                    case '-bw':
-                    case '-not-bw':
-                        // 查询参数必须为数组且长度等于2
-                        if (!(is_array($condition) && count($condition) == 2)) {
-                            throw_http_exception("The {$field} field query parameter must be an array with a length equal to 2.", ErrorCode::ILLEGAL_QUERY);
-                        }
-                        break;
-                    case '-in':
-                    case '-not-in':
-                        // 查询参数必须为字符串且用逗号隔开
-                        if (!(is_string($condition) && strpos($condition, ',') >= 0)) {
-                            throw_http_exception("The {$field} field query parameters must be strings separated by commas.", ErrorCode::ILLEGAL_QUERY);
-                        }
-                        break;
-                    default:
-                        // 查询条件仅支持 -gt,-egt,-lt,-elt,-lk,-not-lk,-eq,-neq,-bw,-not-bw,-in,-not-in,-find_in_set
-                        throw_http_exception("The query condition only support: -gt,-egt,-lt,-elt,-lk,-not-lk,-eq,-neq,-bw,-not-bw,-in,-not-in,-find_in_set.", ErrorCode::ILLEGAL_QUERY);
-                        break;
-                }
+                return true;
+            } else {
+                throw_http_exception("The format of the param parameter must be an array.", ErrorCode::ILLEGAL_QUERY);
             }
-            return true;
         }
+
         return false;
     }
 
